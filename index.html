@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 20px;
+        }
+        .product-card {
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .btn-add {
+            background-color: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="product-card">
+        <h2 style="font-size: 24px;">☕️ Cappuccino</h2>
+        <p>Classical espresso with hot milch und thick foam</p>
+        <p><strong>Price: 3.50 €</strong></p>
+        <button class="btn-add" id="btn-add">Add 1 item</button>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let orderItems = 0;
+        let pricePerItem = 3.50;
+
+        document.getElementById('btn-add').addEventListener('click', () => {
+            orderItems++;
+            let total = (orderItems * pricePerItem).toFixed(2);
+
+            tg.MainButton.text = `Complete order: ${total} €`;
+            tg.MainButton.show();
+        });
+
+        Telegram.WebApp.onEvent('mainButtonClicked', function(){
+            let data = {
+                product: "Cappuccino",
+                quantity: orderItems,
+                totalPrice: (orderItems * pricePerItem).toFixed(2)
+            };
+            tg.sendData(JSON.stringify(data));
+        });
+    </script>
+</body>
+</html>
