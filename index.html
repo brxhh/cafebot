@@ -128,9 +128,10 @@
 
                 const card = document.createElement('div');
                 card.className = 'product-card';
+                // ТУТ ИСПРАВЛЕНО: убрал ${p.icon}
                 card.innerHTML = `
                     <div class="product-info">
-                        <h3>${p.icon} ${p.name}</h3>
+                        <h3>${p.name}</h3>
                         <p>${p.desc}</p>
                         <p class="price">${p.price.toFixed(2)} €</p>
                     </div>
