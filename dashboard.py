@@ -33,7 +33,9 @@ if not df_orders.empty:
 
     st.subheader("📈 Графік виручки по днях")
     revenue_by_day = df_orders.groupby('date')['total'].sum().reset_index()
-    st.line_chart(data=revenue_by_day, x='date', y='total')
+    revenue_by_day['date'] = pd.to_datetime(revenue_by_day['date'])
+    revenue_by_day.set_index('date', inplace=True)
+    st.line_chart(revenue_by_day)
 else:
     st.info("Замовлень ще немає.")
 

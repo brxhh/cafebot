@@ -69,14 +69,21 @@
         let products = [];
         let cart = {};
 
-        async function loadMenu() {
+async function loadMenu() {
             try {
-                const response = await fetch(API_URL);
+                const response = await fetch(API_URL, {
+                    method: 'GET',
+                    headers: {
+                        'ngrok-skip-browser-warning': 'true',
+                        'Content-Type': 'application/json'
+                    }
+                });
+
                 products = await response.json();
                 document.getElementById('loader').style.display = 'none';
                 renderProducts();
             } catch (e) {
-                document.getElementById('loader').innerText = 'Помилка завантаження меню ❌';
+                document.getElementById('loader').innerText = 'Помилка завантаження: ' + e.message;
             }
         }
 
