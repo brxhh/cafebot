@@ -1,9 +1,11 @@
+import os
 import streamlit as st
 import pandas as pd
 import sqlite3
 import json
 from datetime import date
 import requests
+from dotenv import load_dotenv
 
 st.set_page_config(page_title="Кав'ярня Адмін", layout="wide")
 st.title("☕️ Панель керування та Аналітика")
@@ -66,7 +68,6 @@ if not df_orders.empty:
 
         if all_items:
             df_items = pd.DataFrame(all_items)
-            # Групуємо за назвою напою і рахуємо кількість
             items_grouped = df_items.groupby('name')['quantity'].sum().reset_index()
             items_grouped.set_index('name', inplace=True)
             st.bar_chart(items_grouped)
@@ -110,36 +111,54 @@ with st.form("menu_management"):
 st.markdown("---")
 st.header("🛎 Активні замовлення (Кухня)")
 
-BOT_TOKEN = "ТВОЙ_ТОКЕН_БОТА_ЗДЕСЬ"
+load_dotenv()
+TOKEN = os.getenv('BOT_TOKEN')
 
 conn = get_db_connection()
 cursor = conn.cursor()
 
+col_title, col_btn = st.columns([3, 2])
+with col_btn:
+    if st.button("🚀 Видати всі поточні замовлення"):
+        cursor.execute("SELECT id, user_id FROM orders WHERE status = 'pending' OR status IS NULL")
+        all_pending = cursor.fetchall()
+
+        for o_id, u_id in all_pending:
+            if u_id:
+                requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
+                    "chat_id": u_id, "text": f"✅ Твоє замовлення готове! Підходь забирати ☕️"
+                })
+
+        cursor.execute("UPDATE orders SET status = 'completed' WHERE status = 'pending' OR status IS NULL")
+        conn.commit()
+        st.rerun()
+
 try:
-    cursor.execute("SELECT id, items, total, chat_id FROM orders ORDER BY id DESC LIMIT 5")
+    cursor.execute(
+        "SELECT id, items, total, user_id FROM orders WHERE status = 'pending' OR status IS NULL ORDER BY id ASC")
     active_orders = cursor.fetchall()
 except sqlite3.OperationalError:
-    st.warning(
-        "⚠️ Для надсилання повідомлень потрібно додати збереження chat_id клієнта в базу даних під час замовлення.")
+    st.warning("⚠️ Помилка завантаження замовлень.")
     active_orders = []
 
+if not active_orders:
+    st.success("🎉 Усі замовлення видані! Черги немає.")
+else:
+    for order_id, items_json, total, user_id in active_orders:
+        col1, col2, col3 = st.columns([3, 1, 1])
+
+        with col1:
+            st.write(f"**Замовлення #{order_id}** на суму {total} €")
+
+        with col3:
+            if st.button("✅ Видати", key=f"ready_{order_id}"):
+                if user_id:
+                    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
+                        "chat_id": user_id, "text": f"✅ Твоє замовлення готове! Підходь забирати ☕️"
+                    })
+
+                cursor.execute("UPDATE orders SET status = 'completed' WHERE id = ?", (order_id,))
+                conn.commit()
+                st.rerun()
+
 conn.close()
-
-for order_id, items_json, total, chat_id in active_orders:
-    col1, col2, col3 = st.columns([3, 1, 1])
-
-    with col1:
-        st.write(f"**Замовлення #{order_id}** на суму {total} €")
-
-    with col3:
-        if st.button("✅ Видати", key=f"ready_{order_id}"):
-            if chat_id:
-                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                payload = {
-                    "chat_id": chat_id,
-                    "text": f"✅ Твоє замовлення #{order_id} готове! Підходь забирати ☕️"
-                }
-                requests.post(url, json=payload)
-                st.success("Сповіщення успішно надіслано клієнту!")
-            else:
-                st.error("Помилка: Немає ID клієнта")
