@@ -7,12 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
-
+import os
+from dotenv import load_dotenv
 import database
 
 logging.basicConfig(level=logging.INFO)
-
-TOKEN = '8682577922:AAEjHCq4lZuntpfE3Ol3lQuSXHaOdmEJ9Zo'
+load_dotenv()
+TOKEN = os.getenv('BOT_TOKEN')
 WEB_APP_URL = 'https://brxhh.github.io/cafebot/'
 ADMIN_ID = 951795337
 

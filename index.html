@@ -87,18 +87,25 @@ async function loadMenu() {
             }
         }
 
-        function renderProducts() {
+function renderProducts() {
             const list = document.getElementById('product-list');
             list.innerHTML = '';
 
             products.forEach(p => {
                 const count = cart[p.id] || 0;
+
+                const kcal = p.kcal || 120;
+                const protein = p.protein || 6;
+
                 const card = document.createElement('div');
                 card.className = 'product-card';
                 card.innerHTML = `
                     <div class="product-info">
                         <h3>${p.name}</h3>
                         <p>${p.desc}</p>
+                        <p style="font-size: 13px; color: #ff9500; margin-top: 4px; margin-bottom: 4px; font-weight: 500;">
+                            🔥 ${kcal} ккал | 💪 ${protein} г білка
+                        </p>
                         <p class="price">${p.price.toFixed(2)} €</p>
                     </div>
                     <div class="controls">
@@ -119,23 +126,30 @@ async function loadMenu() {
             updateMainButton();
         };
 
+
         function updateMainButton() {
             let total = 0;
             let totalItems = 0;
+            let totalKcal = 0;
+            let totalProtein = 0;
+
             for (const [id, qty] of Object.entries(cart)) {
                 const product = products.find(p => p.id === id);
                 if(product) {
                     total += product.price * qty;
                     totalItems += qty;
+                    totalKcal += (product.kcal || 120) * qty;
+                    totalProtein += (product.protein || 6) * qty;
                 }
             }
             if (totalItems > 0) {
-                tg.MainButton.text = `Оформити замовлення на ${total.toFixed(2)} €`;
+                tg.MainButton.text = `${total.toFixed(2)} € | 🔥 ${totalKcal} ккал | 💪 ${totalProtein} г`;
                 tg.MainButton.show();
             } else {
                 tg.MainButton.hide();
             }
         }
+
 
         tg.onEvent('mainButtonClicked', function() {
             let orderData = [];
