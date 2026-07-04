@@ -69,23 +69,31 @@
         let products = [];
         let cart = {};
 
-        async function loadMenu() {
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'GET',
-                    headers: {
-                        'ngrok-skip-browser-warning': 'true',
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                products = await response.json();
-                document.getElementById('loader').style.display = 'none';
-                renderProducts();
-            } catch (e) {
-                document.getElementById('loader').innerText = 'Помилка завантаження: ' + e.message;
+async function loadMenu() {
+    const loader = document.getElementById('loader');
+    try {
+        console.log("Починаю завантаження...");
+        const response = await fetch(API_URL, {
+            method: 'GET',
+            headers: {
+                'ngrok-skip-browser-warning': 'true',
+                'Content-Type': 'application/json'
             }
-        }
+        });
+
+        if (!response.ok) throw new Error(`Помилка сервера: ${response.status}`);
+
+        products = await response.json();
+        console.log("Дані отримано:", products);
+
+        loader.style.display = 'none';
+        renderProducts();
+    } catch (e) {
+        console.error("Помилка:", e);
+        loader.innerText = 'Сталася помилка. Перевір, чи запущений сервер!';
+        loader.style.color = 'red';
+    }
+}
 
         function renderProducts() {
             const list = document.getElementById('product-list');
