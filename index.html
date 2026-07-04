@@ -140,7 +140,7 @@ async function loadMenu() {
                 }
             }
             if (totalItems > 0) {
-                tg.MainButton.text = \`До сплати: \${total.toFixed(2)} €\`;
+                tg.MainButton.text = "До сплати: " + total.toFixed(2) + " €";
                 tg.MainButton.show();
             } else {
                 tg.MainButton.hide();
