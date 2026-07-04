@@ -69,7 +69,7 @@
         let products = [];
         let cart = {};
 
-async function loadMenu() {
+        async function loadMenu() {
             try {
                 const response = await fetch(API_URL, {
                     method: 'GET',
@@ -87,7 +87,7 @@ async function loadMenu() {
             }
         }
 
-function renderProducts() {
+        function renderProducts() {
             const list = document.getElementById('product-list');
             list.innerHTML = '';
 
@@ -126,7 +126,6 @@ function renderProducts() {
             updateMainButton();
         };
 
-
         function updateMainButton() {
             let total = 0;
             let totalItems = 0;
@@ -150,18 +149,39 @@ function renderProducts() {
             }
         }
 
-
         tg.onEvent('mainButtonClicked', function() {
             let orderData = [];
             let totalAmount = 0;
+            let totalKcal = 0;
+            let totalProtein = 0;
+
             for (const [id, qty] of Object.entries(cart)) {
                 const product = products.find(p => p.id === id);
                 if(product) {
-                    orderData.push({ name: product.name, quantity: qty, price: product.price, sum: product.price * qty });
+                    let itemKcal = (product.kcal || 120) * qty;
+                    let itemProtein = (product.protein || 6) * qty;
+
+                    orderData.push({
+                        name: product.name,
+                        quantity: qty,
+                        price: product.price,
+                        sum: product.price * qty,
+                        kcal: itemKcal,
+                        protein: itemProtein
+                    });
+
                     totalAmount += product.price * qty;
+                    totalKcal += itemKcal;
+                    totalProtein += itemProtein;
                 }
             }
-            tg.sendData(JSON.stringify({ items: orderData, total: totalAmount }));
+
+            tg.sendData(JSON.stringify({
+                items: orderData,
+                total: totalAmount,
+                total_kcal: totalKcal,
+                total_protein: totalProtein
+            }));
         });
 
         loadMenu();
