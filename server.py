@@ -14,7 +14,7 @@ import database
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
-WEB_APP_URL = 'https://brxhh.github.io/cafebot/'
+WEB_APP_URL = 'https://brxhh.github.io/cafebot/?v=7'
 ADMIN_ID = 951795337
 
 bot = Bot(token=TOKEN)
