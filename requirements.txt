@@ -3,3 +3,4 @@ python-dotenv
 aiogram
 fastapi
 uvicorn
+psycopg2-binary

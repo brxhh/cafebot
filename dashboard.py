@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 import pandas as pd
-import sqlite3
+import psycopg2
 import json
 from datetime import date
 import requests
@@ -10,17 +10,23 @@ from dotenv import load_dotenv
 st.set_page_config(page_title="Кав'ярня Адмін", layout="wide")
 st.title("☕️ Панель керування та Аналітика")
 
+load_dotenv()
+TOKEN = os.getenv('BOT_TOKEN')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
+@st.cache_resource
 def get_db_connection():
-    return sqlite3.connect('coffee_shop.db')
+    return psycopg2.connect(DATABASE_URL)
 
-
-# --- БЛОК 1: АНАЛИТИКА (Pandas) ---
+# --- БЛОК 1: АНАЛІТИКА (Pandas) ---
 st.header("📊 Фінансові показники")
 
-conn = get_db_connection()
-df_orders = pd.read_sql_query("SELECT * FROM orders", conn)
-conn.close()
+try:
+    conn = get_db_connection()
+    df_orders = pd.read_sql_query("SELECT * FROM orders", conn)
+except Exception as e:
+    st.error(f"Помилка підключення до бази: {e}")
+    df_orders = pd.DataFrame()
 
 if not df_orders.empty:
     df_orders['timestamp'] = pd.to_datetime(df_orders['timestamp'])
@@ -29,7 +35,7 @@ if not df_orders.empty:
     # Рахуємо метрики
     total_revenue = df_orders['total'].sum()
     total_orders = len(df_orders)
-    avg_check = total_revenue / total_orders
+    avg_check = total_revenue / total_orders if total_orders > 0 else 0
 
     # Ліквідність (Готівка/Виручка за сьогодні)
     today = date.today()
@@ -77,7 +83,7 @@ if not df_orders.empty:
 else:
     st.info("Замовлень ще немає.")
 
-# --- БЛОК 2: ДИНАМИЧЕСКОЕ МЕНЮ ---
+# --- БЛОК 2: ДИНАМІЧНЕ МЕНЮ ---
 st.markdown("---")
 st.header("📋 Керування наявністю в Меню")
 
@@ -85,7 +91,6 @@ conn = get_db_connection()
 cursor = conn.cursor()
 cursor.execute("SELECT id, name, available FROM products")
 products = cursor.fetchall()
-conn.close()
 
 st.write("Зніміть галочку, якщо товар закінчився. Зміни миттєво відобразяться у користувачів.")
 
@@ -97,25 +102,16 @@ with st.form("menu_management"):
     save_btn = st.form_submit_button("Зберегти зміни в меню")
 
     if save_btn:
-        conn = get_db_connection()
-        cursor = conn.cursor()
         for p_id, is_available in updated_statuses.items():
             status_val = 1 if is_available else 0
-            cursor.execute("UPDATE products SET available = ? WHERE id = ?", (status_val, p_id))
+            cursor.execute("UPDATE products SET available = %s WHERE id = %s", (status_val, p_id))
         conn.commit()
-        conn.close()
         st.success("Меню успішно оновлено!")
         st.rerun()
 
-
+# --- БЛОК 3: АКТИВНІ ЗАМОВЛЕННЯ ---
 st.markdown("---")
 st.header("🛎 Активні замовлення (Кухня)")
-
-load_dotenv()
-TOKEN = os.getenv('BOT_TOKEN')
-
-conn = get_db_connection()
-cursor = conn.cursor()
 
 col_title, col_btn = st.columns([3, 2])
 with col_btn:
@@ -137,8 +133,8 @@ try:
     cursor.execute(
         "SELECT id, items, total, user_id FROM orders WHERE status = 'pending' OR status IS NULL ORDER BY id ASC")
     active_orders = cursor.fetchall()
-except sqlite3.OperationalError:
-    st.warning("⚠️ Помилка завантаження замовлень.")
+except Exception as e:
+    st.warning(f"⚠️ Помилка завантаження замовлень: {e}")
     active_orders = []
 
 if not active_orders:
@@ -157,8 +153,8 @@ else:
                         "chat_id": user_id, "text": f"✅ Твоє замовлення готове! Підходь забирати ☕️"
                     })
 
-                cursor.execute("UPDATE orders SET status = 'completed' WHERE id = ?", (order_id,))
+                cursor.execute("UPDATE orders SET status = 'completed' WHERE id = %s", (order_id,))
                 conn.commit()
                 st.rerun()
 
-conn.close()
+cursor.close()
