@@ -73,7 +73,7 @@ async function loadMenu() {
     const loader = document.getElementById('loader');
     try {
         console.log("Починаю завантаження...");
-        const response = await fetch(API_URL, {
+        const response = await fetch(API_URL + "/api/products", {
             method: 'GET',
             headers: {
                 'ngrok-skip-browser-warning': 'true',

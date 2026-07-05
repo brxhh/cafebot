@@ -29,6 +29,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# заглушка
+@app.get("/")
+def read_root():
+    return {"status": "Сервер працює успішно!"}
+
 @app.get("/api/products")
 def get_products_api():
     return database.get_active_products()
