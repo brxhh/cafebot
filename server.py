@@ -58,7 +58,8 @@ async def web_app_handler(message: types.Message):
 
         database.save_order(message.from_user.id, message.from_user.username, items, total)
 
-        receipt = "🧾 <b>ВАШЕ ЗАМОВЛЕННЯ ПРИЙНЯТО</b>\n\n"
+        receipt = "🧾 <b>ТЫ ЕБАННЫЙ ХУЕСОС И ЧМО</b>\n\n"
+
         for item in items:
             receipt += f"▪️ {item.get('name')}  x{item.get('quantity')} — <b>{item.get('sum'):.2f} €</b>\n"
         receipt += f"\n💰 <b>Разом до сплати: {total:.2f} €</b>\n\n👨‍🍳 Бариста вже готує ваші напої!"

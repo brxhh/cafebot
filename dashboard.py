@@ -9,7 +9,7 @@ import requests
 from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
 from streamlit_cookies_manager import CookieManager
-
+# xуй
 warnings.filterwarnings('ignore', category=UserWarning)
 
 st.set_page_config(page_title="Кав'ярня Адмін", layout="wide")
