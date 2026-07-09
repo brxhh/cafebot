@@ -16,9 +16,29 @@ st.title("☕️ Панель керування та Аналітика")
 st_autorefresh(interval=5000, limit=None, key="admin_autorefresh")
 
 load_dotenv()
+CORRECT_PASSWORD = os.getenv("CONNECT_PASSWORD")
 TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
+
+def check_password():
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.title("🔒 Вхід в панель керування")
+    password = st.text_input("Введіть пароль доступу:", type="password")
+
+    if password == CORRECT_PASSWORD:
+        st.session_state["authenticated"] = True
+        st.rerun()
+    elif password:
+        st.error("❌ Неправильний пароль!")
+
+    return False
+
+
+if not check_password():
+    st.stop()
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
 
