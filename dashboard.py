@@ -20,8 +20,16 @@ CORRECT_PASSWORD = os.getenv("CONNECT_PASSWORD")
 TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
+IS_LOCAL = os.getenv("IS_LOCAL", "False") == "True"
+
 # --- СИСТЕМА ЛОГІНУ ---
 def check_password():
+    if IS_LOCAL:
+        return True
+
+    if st.query_params.get("pwd") == CORRECT_PASSWORD:
+        return True
+
     if st.session_state.get("authenticated"):
         return True
 
