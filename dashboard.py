@@ -9,6 +9,7 @@ import requests
 from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
 from streamlit_cookies_manager import CookieManager
+import time
 # xуй
 warnings.filterwarnings('ignore', category=UserWarning)
 
@@ -23,17 +24,25 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 
 cookies = CookieManager()
 
-# --- СИСТЕМА ЛОГІНУ ---
+# --- СИСТЕМА ЛОГІНУ (кастыли с куки файлаи)---
 def check_password():
     if not cookies.ready():
         st.stop()
+    login_time = cookies.get("login_time")
 
-    st.sidebar.write(f"Cookie value: {cookies.get('admin_auth')}")
+    is_authenticated = False
+    if login_time:
+        try:
+            if (time.time() - float(login_time)) < 28800:
+                is_authenticated = True
+            else:
+                cookies["login_time"] = ""
+                cookies.save()
+        except (ValueError, TypeError):
+            pass
 
-    if cookies.get("admin_auth") == "true":
-        return True
-
-    if st.session_state.get("authenticated"):
+    if is_authenticated or st.session_state.get("authenticated"):
+        st.session_state["authenticated"] = True
         return True
 
     st.markdown("### 🔒 Вхід")
@@ -41,7 +50,7 @@ def check_password():
 
     if password == CORRECT_PASSWORD:
         st.session_state["authenticated"] = True
-        cookies["admin_auth"] = "true"
+        cookies["login_time"] = str(time.time())
         cookies.save()
         st.rerun()
     elif password:
