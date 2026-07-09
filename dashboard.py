@@ -1,4 +1,5 @@
 import os
+import warnings
 import streamlit as st
 import pandas as pd
 import psycopg2
@@ -6,27 +7,33 @@ import json
 from datetime import date
 import requests
 from dotenv import load_dotenv
+from streamlit_autorefresh import st_autorefresh
+
+warnings.filterwarnings('ignore', category=UserWarning)
 
 st.set_page_config(page_title="Кав'ярня Адмін", layout="wide")
 st.title("☕️ Панель керування та Аналітика")
+st_autorefresh(interval=5000, limit=None, key="admin_autorefresh")
 
 load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-@st.cache_resource
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
+
+try:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+except Exception as e:
+    st.error(f"⚠️ Помилка підключення до бази даних: {e}")
+    st.stop()
 
 # --- БЛОК 1: АНАЛІТИКА (Pandas) ---
 st.header("📊 Фінансові показники")
 
-try:
-    conn = get_db_connection()
-    df_orders = pd.read_sql_query("SELECT * FROM orders", conn)
-except Exception as e:
-    st.error(f"Помилка підключення до бази: {e}")
-    df_orders = pd.DataFrame()
+# Читаємо дані, використовуючи вже відкритий conn
+df_orders = pd.read_sql_query("SELECT * FROM orders", conn)
 
 if not df_orders.empty:
     df_orders['timestamp'] = pd.to_datetime(df_orders['timestamp'])
@@ -56,9 +63,8 @@ if not df_orders.empty:
     with chart_col1:
         st.subheader("📈 Графік виручки по днях")
         revenue_by_day = df_orders.groupby('date')['total'].sum().reset_index()
-        revenue_by_day['date'] = pd.to_datetime(revenue_by_day['date'])
-        revenue_by_day.set_index('date', inplace=True)
-        st.line_chart(revenue_by_day)
+        revenue_by_day['date'] = revenue_by_day['date'].astype(str)
+        st.bar_chart(revenue_by_day, x='date', y='total')
 
     with chart_col2:
         st.subheader("🥧 Популярність напоїв (шт)")
@@ -87,8 +93,6 @@ else:
 st.markdown("---")
 st.header("📋 Керування наявністю в Меню")
 
-conn = get_db_connection()
-cursor = conn.cursor()
 cursor.execute("SELECT id, name, available FROM products")
 products = cursor.fetchall()
 
@@ -111,7 +115,7 @@ with st.form("menu_management"):
 
 # --- БЛОК 3: АКТИВНІ ЗАМОВЛЕННЯ ---
 st.markdown("---")
-st.header("🛎 Активні замовлення (Кухня)")
+st.header("🛎 Активні замовлення")
 
 col_title, col_btn = st.columns([3, 2])
 with col_btn:
@@ -141,20 +145,39 @@ if not active_orders:
     st.success("🎉 Усі замовлення видані! Черги немає.")
 else:
     for order_id, items_json, total, user_id in active_orders:
-        col1, col2, col3 = st.columns([3, 1, 1])
+        col1, col2 = st.columns([4, 1])
 
         with col1:
-            st.write(f"**Замовлення #{order_id}** на суму {total} €")
+            st.subheader(f"Замовлення #{order_id} — {total:.2f} €")
 
-        with col3:
-            if st.button("✅ Видати", key=f"ready_{order_id}"):
+            try:
+                items_list = json.loads(items_json)
+                items_text = ""
+                for item in items_list:
+                    items_text += f"▪️ {item['name']} — **{item['quantity']} шт.**\n"
+
+                st.markdown(items_text)
+            except Exception as e:
+                st.caption("Не вдалося прочитати склад замовлення")
+
+            st.markdown("---")
+
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("✅ Видати", key=f"ready_{order_id}", use_container_width=True):
                 if user_id:
-                    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
+                    response = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
                         "chat_id": user_id, "text": f"✅ Твоє замовлення готове! Підходь забирати ☕️"
                     })
 
-                cursor.execute("UPDATE orders SET status = 'completed' WHERE id = %s", (order_id,))
-                conn.commit()
-                st.rerun()
+                    if response.status_code != 200:
+                        st.error(f"Помилка Telegram: {response.text}")
+                    else:
+                        cursor.execute("UPDATE orders SET status = 'completed' WHERE id = %s", (order_id,))
+                        conn.commit()
+                        st.rerun()
+                else:
+                    st.warning("У цього замовлення немає user_id, повідомлення не відправлено.")
 
 cursor.close()
+conn.close()
