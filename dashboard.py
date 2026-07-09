@@ -8,6 +8,7 @@ from datetime import date
 import requests
 from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
+from streamlit_cookies_controller import CookieController
 
 warnings.filterwarnings('ignore', category=UserWarning)
 
@@ -16,28 +17,25 @@ st.title("☕️ Панель керування та Аналітика")
 st_autorefresh(interval=5000, limit=None, key="admin_autorefresh")
 
 load_dotenv()
-CORRECT_PASSWORD = os.getenv("CONNECT_PASSWORD")
+CORRECT_PASSWORD = os.getenv("CORRECT_PASSWORD")
 TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-IS_LOCAL = os.getenv("IS_LOCAL", "False") == "True"
-
+cookies = CookieController()
 # --- СИСТЕМА ЛОГІНУ ---
 def check_password():
-    if IS_LOCAL:
-        return True
 
-    if st.query_params.get("pwd") == CORRECT_PASSWORD:
-        return True
+    if cookies.get("admin_auth") == "true":
+            return True
 
     if st.session_state.get("authenticated"):
-        return True
-
+            return True
     st.markdown("### 🔒 Вхід")
     password = st.text_input("Введіть пароль доступу:", type="password")
 
     if password == CORRECT_PASSWORD:
         st.session_state["authenticated"] = True
+        cookies.set("admin_auth", "true", max_age=12 * 60 * 60)
         st.rerun()
     elif password:
         st.error("❌ Неправильний пароль!")

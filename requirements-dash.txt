@@ -4,4 +4,4 @@ psycopg2-binary
 python-dotenv
 requests
 streamlit_autorefresh
-extra_streamlit_components
+streamlit_cookies_controller
