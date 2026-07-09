@@ -22,25 +22,34 @@ TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 cookies = CookieController()
-# --- СИСТЕМА ЛОГІНУ ---
-def check_password():
 
+if "cookies_initialized" not in st.session_state:
+    st.session_state["cookies_initialized"] = True
+    st.rerun()
+
+# --- СИСТЕМА ЛОГИНА ---
+def check_password():
     if cookies.get("admin_auth") == "true":
-            return True
+        return True
 
     if st.session_state.get("authenticated"):
-            return True
+        return True
+
     st.markdown("### 🔒 Вхід")
     password = st.text_input("Введіть пароль доступу:", type="password")
 
     if password == CORRECT_PASSWORD:
         st.session_state["authenticated"] = True
+        # Записываем куку в браузер на 12 часов
         cookies.set("admin_auth", "true", max_age=12 * 60 * 60)
         st.rerun()
     elif password:
         st.error("❌ Неправильний пароль!")
 
     return False
+
+if not check_password():
+    st.stop()
 
 
 if not check_password():
