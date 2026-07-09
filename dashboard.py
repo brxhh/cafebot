@@ -8,7 +8,7 @@ from datetime import date
 import requests
 from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
-from streamlit_cookies_controller import CookieController
+from streamlit_cookies_manager import CookieManager
 
 warnings.filterwarnings('ignore', category=UserWarning)
 
@@ -21,14 +21,15 @@ CORRECT_PASSWORD = os.getenv("CORRECT_PASSWORD")
 TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-cookies = CookieController()
+cookies = CookieManager()
 
-if "cookies_initialized" not in st.session_state:
-    st.session_state["cookies_initialized"] = True
-    st.rerun()
-
-# --- СИСТЕМА ЛОГИНА ---
+# --- СИСТЕМА ЛОГІНУ ---
 def check_password():
+    if not cookies.ready():
+        st.stop()
+
+    st.sidebar.write(f"Cookie value: {cookies.get('admin_auth')}")
+
     if cookies.get("admin_auth") == "true":
         return True
 
@@ -36,22 +37,17 @@ def check_password():
         return True
 
     st.markdown("### 🔒 Вхід")
-    password = st.text_input("Введіть пароль доступу:", type="password")
+    password = st.text_input("Введіть пароль:", type="password")
 
     if password == CORRECT_PASSWORD:
         st.session_state["authenticated"] = True
-        # Записываем куку в браузер на 12 часов
-        cookies.set("admin_auth", "true", max_age=12 * 60 * 60)
+        cookies["admin_auth"] = "true"
+        cookies.save()
         st.rerun()
     elif password:
         st.error("❌ Неправильний пароль!")
 
     return False
-
-if not check_password():
-    st.stop()
-
-
 if not check_password():
     st.stop()
 def get_db_connection():
