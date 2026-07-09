@@ -20,12 +20,12 @@ CORRECT_PASSWORD = os.getenv("CONNECT_PASSWORD")
 TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-
+# --- СИСТЕМА ЛОГІНУ ---
 def check_password():
     if st.session_state.get("authenticated"):
         return True
 
-    st.title("🔒 Вхід в панель керування")
+    st.markdown("### 🔒 Вхід")
     password = st.text_input("Введіть пароль доступу:", type="password")
 
     if password == CORRECT_PASSWORD:
@@ -52,7 +52,6 @@ except Exception as e:
 # --- БЛОК 1: АНАЛІТИКА (Pandas) ---
 st.header("📊 Фінансові показники")
 
-# Читаємо дані, використовуючи вже відкритий conn
 df_orders = pd.read_sql_query("SELECT * FROM orders", conn)
 
 if not df_orders.empty:
@@ -75,7 +74,7 @@ if not df_orders.empty:
     col3.metric("Всього замовлень", total_orders)
     col4.metric("Середній чек", f"{avg_check:.2f} €")
 
-    st.markdown("<br>", unsafe_allow_html=True)  # Відступ
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # Розділяємо екран на 2 колонки для графіків
     chart_col1, chart_col2 = st.columns(2)
@@ -88,7 +87,6 @@ if not df_orders.empty:
 
     with chart_col2:
         st.subheader("🥧 Популярність напоїв (шт)")
-        # Збираємо всі продані товари з JSON
         all_items = []
         for items_json in df_orders['items']:
             try:
