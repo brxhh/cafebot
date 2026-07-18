@@ -8,9 +8,7 @@ from datetime import date
 import requests
 from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
-from streamlit_cookies_manager import CookieManager
 import time
-# xуй
 warnings.filterwarnings('ignore', category=UserWarning)
 
 st.set_page_config(page_title="Кав'ярня Адмін", layout="wide")
@@ -21,28 +19,24 @@ load_dotenv()
 CORRECT_PASSWORD = os.getenv("CORRECT_PASSWORD")
 TOKEN = os.getenv('BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
+ADMIN_ID = 951795337
 
-cookies = CookieManager()
 
-# --- СИСТЕМА ЛОГІНУ (кастыли с куки файлаи)---
+# --- 1. НАДЕЖНАЯ СИСТЕМА ЛОГИНА (БЕЗ COOKIES) ---
 def check_password():
-    if not cookies.ready():
-        st.stop()
-    login_time = cookies.get("login_time")
+    url_time = st.query_params.get("t")
 
-    is_authenticated = False
-    if login_time:
+    if url_time:
         try:
-            if (time.time() - float(login_time)) < 28800:
-                is_authenticated = True
+            if (time.time() - float(url_time)) < 28800:  # 8 часов
+                st.session_state["authenticated"] = True
+                return True
             else:
-                cookies["login_time"] = ""
-                cookies.save()
-        except (ValueError, TypeError):
+                st.query_params.clear()
+        except:
             pass
 
-    if is_authenticated or st.session_state.get("authenticated"):
-        st.session_state["authenticated"] = True
+    if st.session_state.get("authenticated"):
         return True
 
     st.markdown("### 🔒 Вхід")
@@ -50,53 +44,74 @@ def check_password():
 
     if password == CORRECT_PASSWORD:
         st.session_state["authenticated"] = True
-        cookies["login_time"] = str(time.time())
-        cookies.save()
+        st.query_params["t"] = str(time.time())
         st.rerun()
     elif password:
         st.error("❌ Неправильний пароль!")
 
     return False
+
+
 if not check_password():
     st.stop()
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL)
+
+
+# --- 2. БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ К БД (С КЭШЕМ) ---
+@st.cache_resource(ttl=600)
+def init_connection():
+    return psycopg2.connect(DATABASE_URL, connect_timeout=5)
+
 
 try:
-    conn = get_db_connection()
+    conn = init_connection()
+    if conn.closed != 0:
+        st.cache_resource.clear()
+        conn = init_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
 except Exception as e:
     st.error(f"⚠️ Помилка підключення до бази даних: {e}")
     st.stop()
 
-# --- БЛОК 1: АНАЛІТИКА (Pandas) ---
+# --- 3. АНАЛИТИКА ТА ЗВІТ ---
 st.header("📊 Фінансові показники")
 
-df_orders = pd.read_sql_query("SELECT * FROM orders", conn)
+df_orders = pd.read_sql_query("SELECT * FROM orders WHERE status = 'completed'", conn)
 
 if not df_orders.empty:
     df_orders['timestamp'] = pd.to_datetime(df_orders['timestamp'])
     df_orders['date'] = df_orders['timestamp'].dt.date
 
-    # Рахуємо метрики
     total_revenue = df_orders['total'].sum()
     total_orders = len(df_orders)
     avg_check = total_revenue / total_orders if total_orders > 0 else 0
 
-    # Ліквідність (Готівка/Виручка за сьогодні)
     today = date.today()
     liquidity_today = df_orders[df_orders['date'] == today]['total'].sum()
 
-    # Виводимо 4 картки в один ряд
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Загальна виручка", f"{total_revenue:.2f} €")
-    col2.metric("Ліквідність (Сьогодні)", f"{liquidity_today:.2f} €", "Готівка в касі")
-    col3.metric("Всього замовлень", total_orders)
-    col4.metric("Середній чек", f"{avg_check:.2f} €")
+    col_btn, _ = st.columns([2, 3])
+    with col_btn:
+        if st.button("📈 Закрити зміну (Відправити звіт)"):
+            report = (
+                f"📊 <b>ЗВІТ ЗА {today.strftime('%d.%m.%Y')}</b>\n\n"
+                f"💵 Виручка за день: <b>{liquidity_today:.2f} €</b>\n"
+                f"📦 Кількість замовлень: <b>{len(df_orders[df_orders['date'] == today])}</b>\n"
+                f"💳 Середній чек: <b>{avg_check:.2f} €</b>"
+            )
+            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
+                "chat_id": ADMIN_ID, "text": report, "parse_mode": "HTML"
+            })
+            st.success("✅ Звіт відправлено в Telegram!")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Розділяємо екран на 2 колонки для графіків
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Виручка (За весь час)", f"{total_revenue:.2f} €")
+    col2.metric("Виручка (Сьогодні)", f"{liquidity_today:.2f} €", "Готівка в касі")
+    col3.metric("Замовлень", total_orders)
+    col4.metric("Середній чек", f"{avg_check:.2f} €")
+
+    st.markdown("<br>", unsafe_allow_html=True)
     chart_col1, chart_col2 = st.columns(2)
 
     with chart_col1:
@@ -110,8 +125,7 @@ if not df_orders.empty:
         all_items = []
         for items_json in df_orders['items']:
             try:
-                items_list = json.loads(items_json)
-                for item in items_list:
+                for item in json.loads(items_json):
                     all_items.append({"name": item['name'], "quantity": item['quantity']})
             except:
                 pass
@@ -121,55 +135,75 @@ if not df_orders.empty:
             items_grouped = df_items.groupby('name')['quantity'].sum().reset_index()
             items_grouped.set_index('name', inplace=True)
             st.bar_chart(items_grouped)
-        else:
-            st.info("Немає даних про товари")
-
 else:
-    st.info("Замовлень ще немає.")
+    st.info("Ще немає виконаних замовлень.")
 
-# --- БЛОК 2: ДИНАМІЧНЕ МЕНЮ ---
+# --- 4. ДИНАМІЧНЕ МЕНЮ ---
 st.markdown("---")
-st.header("📋 Керування наявністю в Меню")
+with st.expander("📋 Керування наявністю в Меню"):
+    cursor.execute("SELECT id, name, available FROM products ORDER BY name")
+    products = cursor.fetchall()
 
-cursor.execute("SELECT id, name, available FROM products")
-products = cursor.fetchall()
+    with st.form("menu_management"):
+        updated_statuses = {}
+        for p_id, p_name, p_avail in products:
+            updated_statuses[p_id] = st.checkbox(p_name, value=bool(p_avail), key=f"check_{p_id}")
 
-st.write("Зніміть галочку, якщо товар закінчився. Зміни миттєво відобразяться у користувачів.")
+        if st.form_submit_button("Зберегти зміни в меню"):
+            for p_id, is_available in updated_statuses.items():
+                cursor.execute("UPDATE products SET available = %s WHERE id = %s", (1 if is_available else 0, p_id))
+            st.success("Меню успішно оновлено!")
+            st.rerun()
 
-with st.form("menu_management"):
-    updated_statuses = {}
-    for p_id, p_name, p_avail in products:
-        updated_statuses[p_id] = st.checkbox(p_name, value=bool(p_avail), key=f"check_{p_id}")
+    st.markdown("---")
 
-    save_btn = st.form_submit_button("Зберегти зміни в меню")
+    col_add, col_del = st.columns(2)
 
-    if save_btn:
-        for p_id, is_available in updated_statuses.items():
-            status_val = 1 if is_available else 0
-            cursor.execute("UPDATE products SET available = %s WHERE id = %s", (status_val, p_id))
-        conn.commit()
-        st.success("Меню успішно оновлено!")
-        st.rerun()
+    with col_add:
+        with st.popover("➕ Додати позицію", use_container_width=True):
+            with st.form("add_new_product_form"):
+                st.write("Введіть дані нового напою:")
+                new_id = st.text_input("ID (англ, без пробілів)*")
+                new_name = st.text_input("Назва для меню*")
+                new_desc = st.text_input("Опис")
+                new_price = st.number_input("Ціна (€)*", min_value=0.1, step=0.5, format="%.2f")
 
-# --- БЛОК 3: АКТИВНІ ЗАМОВЛЕННЯ ---
+                if st.form_submit_button("Додати в базу", type="primary", use_container_width=True):
+                    if new_id and new_name and new_price > 0:
+                        try:
+                            cursor.execute(
+                                'INSERT INTO products (id, name, "desc", price, available) VALUES (%s, %s, %s, %s, 1)',
+                                (new_id.strip().lower(), new_name.strip(), new_desc.strip(), new_price)
+                            )
+                            st.rerun()
+                        except psycopg2.IntegrityError:
+                            conn.rollback()
+                            st.error("Помилка: Напій з таким ID вже існує!")
+                    else:
+                        st.warning("Заповніть обов'язкові поля (*)")
+
+    with col_del:
+        with st.popover("🗑 Видалити позицію", use_container_width=True):
+            with st.form("delete_product_form"):
+                st.write("Оберіть напій для видалення:")
+
+                prod_dict = {f"{p_name} ({p_id})": p_id for p_id, p_name, _ in products}
+
+                if not prod_dict:
+                    st.info("Меню порожнє.")
+                    selected_to_delete = None
+                else:
+                    selected_to_delete = st.selectbox("Напій", options=list(prod_dict.keys()),
+                                                      label_visibility="collapsed")
+
+                if st.form_submit_button("🗑 Видалити назавжди", use_container_width=True):
+                    if selected_to_delete:
+                        del_id = prod_dict[selected_to_delete]
+                        cursor.execute("DELETE FROM products WHERE id = %s", (del_id,))
+                        st.rerun()
+# --- 5. АКТИВНІ ЗАМОВЛЕННЯ ---
 st.markdown("---")
 st.header("🛎 Активні замовлення")
-
-col_title, col_btn = st.columns([3, 2])
-with col_btn:
-    if st.button("🚀 Видати всі поточні замовлення"):
-        cursor.execute("SELECT id, user_id FROM orders WHERE status = 'pending' OR status IS NULL")
-        all_pending = cursor.fetchall()
-
-        for o_id, u_id in all_pending:
-            if u_id:
-                requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
-                    "chat_id": u_id, "text": f"✅ Твоє замовлення готове! Підходь забирати ☕️"
-                })
-
-        cursor.execute("UPDATE orders SET status = 'completed' WHERE status = 'pending' OR status IS NULL")
-        conn.commit()
-        st.rerun()
 
 try:
     cursor.execute(
@@ -183,39 +217,51 @@ if not active_orders:
     st.success("🎉 Усі замовлення видані! Черги немає.")
 else:
     for order_id, items_json, total, user_id in active_orders:
-        col1, col2 = st.columns([4, 1])
+        col1, col2, col3 = st.columns([3, 1, 1])
 
         with col1:
             st.subheader(f"Замовлення #{order_id} — {total:.2f} €")
-
             try:
-                items_list = json.loads(items_json)
-                items_text = ""
-                for item in items_list:
-                    items_text += f"▪️ {item['name']} — **{item['quantity']} шт.**\n"
-
+                items_text = "".join([f"▪️ {i['name']} — **{i['quantity']} шт.**\n" for i in json.loads(items_json)])
                 st.markdown(items_text)
-            except Exception as e:
-                st.caption("Не вдалося прочитати склад замовлення")
-
-            st.markdown("---")
+            except:
+                st.caption("Помилка читання складу")
 
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("✅ Видати", key=f"ready_{order_id}", use_container_width=True):
                 if user_id:
-                    response = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
+                    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
                         "chat_id": user_id, "text": f"✅ Твоє замовлення готове! Підходь забирати ☕️"
                     })
+                cursor.execute("UPDATE orders SET status = 'completed' WHERE id = %s", (order_id,))
+                st.rerun()
 
-                    if response.status_code != 200:
-                        st.error(f"Помилка Telegram: {response.text}")
-                    else:
-                        cursor.execute("UPDATE orders SET status = 'completed' WHERE id = %s", (order_id,))
-                        conn.commit()
-                        st.rerun()
-                else:
-                    st.warning("У цього замовлення немає user_id, повідомлення не відправлено.")
+        with col3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.popover("❌ Скасувати", use_container_width=True):
+                cancel_reason = st.text_input("Вкажіть причину (необов'язково):", key=f"reason_{order_id}",
+                                              placeholder="Наприклад: немає молока")
+                if st.button("Підтвердити відміну", key=f"confirm_{order_id}", type="primary",
+                             use_container_width=True):
+                    reason_text = f"\n💬 Причина: {cancel_reason}" if cancel_reason.strip() else ""
+                    if user_id:
+                        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={
+                            "chat_id": user_id,
+                            "text": f"❌ Ваше замовлення було скасовано.{reason_text}\nЗверніться до баристи."
+                        })
+                    cursor.execute("UPDATE orders SET status = 'cancelled' WHERE id = %s", (order_id,))
+                    st.rerun()
+        st.markdown("---")
 
-cursor.close()
-conn.close()
+# --- 6. АРХИВ (СЕГОДНЯ) ---
+with st.expander("📂 Видані за сьогодні"):
+    cursor.execute(
+        "SELECT id, items, total FROM orders WHERE status = 'completed' AND DATE(timestamp) = CURRENT_DATE ORDER BY id DESC")
+    completed_today = cursor.fetchall()
+
+    if not completed_today:
+        st.info("Сьогодні ще немає виданих замовлень.")
+    else:
+        for order_id, items_json, total in completed_today:
+            st.markdown(f"**#{order_id}** — {total:.2f} €")
